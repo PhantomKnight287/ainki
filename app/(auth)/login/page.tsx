@@ -1,8 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { useActionState, useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/auth-form";
@@ -11,38 +9,39 @@ import { toast } from "@/components/toast";
 import { type LoginActionState, login } from "../actions";
 
 export default function Page() {
-  const router = useRouter();
-
   const [email, setEmail] = useState("");
-  const [isSuccessful, setIsSuccessful] = useState(false);
 
   const [state, formAction] = useActionState<LoginActionState, FormData>(
     login,
-    {
-      status: "idle",
-    }
+    { status: "idle" }
   );
 
-  const { update: updateSession } = useSession();
-
   useEffect(() => {
-    if (state.status === "failed") {
-      toast({
-        type: "error",
-        description: "Invalid credentials!",
-      });
-    } else if (state.status === "invalid_data") {
-      toast({
-        type: "error",
-        description: "Failed validating your submission!",
-      });
-    } else if (state.status === "success") {
-      setIsSuccessful(true);
-      updateSession();
-      router.refresh();
+    const handleStateChange = () => {
+      switch (state.status) {
+        case "failed":
+          toast({
+            type: "error",
+            description: "Invalid email or password. Please try again.",
+          });
+          break;
+        case "invalid_data":
+          toast({
+            type: "error",
+            description: "Please check your information and try again.",
+          });
+          break;
+      }
+    };
+
+    if (
+      state.status !== "idle" &&
+      state.status !== "in_progress" &&
+      state.status !== "success"
+    ) {
+      handleStateChange();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.status, router.refresh, updateSession]);
+  }, [state.status]);
 
   const handleSubmit = (formData: FormData) => {
     setEmail(formData.get("email") as string);
@@ -59,7 +58,9 @@ export default function Page() {
           </p>
         </div>
         <AuthForm action={handleSubmit} defaultEmail={email}>
-          <SubmitButton isSuccessful={isSuccessful}>Sign in</SubmitButton>
+          <SubmitButton isSuccessful={state.status === "success"}>
+            Sign in
+          </SubmitButton>
           <p className="mt-4 text-center text-gray-600 text-sm dark:text-zinc-400">
             {"Don't have an account? "}
             <Link

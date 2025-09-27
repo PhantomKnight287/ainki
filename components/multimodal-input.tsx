@@ -1,9 +1,10 @@
 "use client";
 
 import type { UseChatHelpers } from "@ai-sdk/react";
-import { Trigger } from "@radix-ui/react-select";
-import type { UIMessage } from "ai";
+import type { LanguageModelUsage, UIMessage } from "ai";
 import equal from "fast-deep-equal";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowDown } from "lucide-react";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -17,31 +18,26 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { getContextWindow, normalizeUsage } from "tokenlens";
 import { useLocalStorage, useWindowSize } from "usehooks-ts";
 import { saveChatModelAsCookie } from "@/app/(chat)/actions";
 import { SelectItem } from "@/components/ui/select";
+import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
 import { chatModels } from "@/lib/ai/models";
 import { myProvider } from "@/lib/ai/providers";
 import type { Attachment, ChatMessage } from "@/lib/types";
-import type { AppUsage } from "@/lib/usage";
-import { cn } from "@/lib/utils";
 import { Context } from "./elements/context";
 import {
   PromptInput,
   PromptInputModelSelect,
   PromptInputModelSelectContent,
+  PromptInputModelSelectTrigger,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputToolbar,
   PromptInputTools,
 } from "./elements/prompt-input";
-import {
-  ArrowUpIcon,
-  ChevronDownIcon,
-  CpuIcon,
-  PaperclipIcon,
-  StopIcon,
-} from "./icons";
+import { ArrowUpIcon, PaperclipIcon, StopIcon } from "./icons";
 import { PreviewAttachment } from "./preview-attachment";
 import { SuggestedActions } from "./suggested-actions";
 import { Button } from "./ui/button";
@@ -61,7 +57,6 @@ function PureMultimodalInput({
   className,
   selectedVisibilityType,
   selectedModelId,
-  onModelChange,
   usage,
 }: {
   chatId: string;
@@ -69,37 +64,36 @@ function PureMultimodalInput({
   setInput: Dispatch<SetStateAction<string>>;
   status: UseChatHelpers<ChatMessage>["status"];
   stop: () => void;
-  attachments: Attachment[];
-  setAttachments: Dispatch<SetStateAction<Attachment[]>>;
-  messages: UIMessage[];
+  attachments: Array<Attachment>;
+  setAttachments: Dispatch<SetStateAction<Array<Attachment>>>;
+  messages: Array<UIMessage>;
   setMessages: UseChatHelpers<ChatMessage>["setMessages"];
   sendMessage: UseChatHelpers<ChatMessage>["sendMessage"];
   className?: string;
   selectedVisibilityType: VisibilityType;
   selectedModelId: string;
-  onModelChange?: (modelId: string) => void;
-  usage?: AppUsage;
+  usage?: LanguageModelUsage;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
-
-  const adjustHeight = useCallback(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "44px";
-    }
-  }, []);
 
   useEffect(() => {
     if (textareaRef.current) {
       adjustHeight();
     }
-  }, [adjustHeight]);
+  }, []);
 
-  const resetHeight = useCallback(() => {
+  const adjustHeight = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "44px";
     }
-  }, []);
+  };
+
+  const resetHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "44px";
+    }
+  };
 
   const [localStorageInput, setLocalStorageInput] = useLocalStorage(
     "input",
@@ -116,7 +110,7 @@ function PureMultimodalInput({
     }
     // Only run once after hydration
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adjustHeight, localStorageInput, setInput]);
+  }, []);
 
   useEffect(() => {
     setLocalStorageInput(input);
@@ -127,7 +121,7 @@ function PureMultimodalInput({
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadQueue, setUploadQueue] = useState<string[]>([]);
+  const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
 
   const submitForm = useCallback(() => {
     window.history.replaceState({}, "", `/chat/${chatId}`);
@@ -165,10 +159,9 @@ function PureMultimodalInput({
     setLocalStorageInput,
     width,
     chatId,
-    resetHeight,
   ]);
 
-  const uploadFile = useCallback(async (file: File) => {
+  const uploadFile = async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
 
@@ -190,20 +183,38 @@ function PureMultimodalInput({
       }
       const { error } = await response.json();
       toast.error(error);
-    } catch (_error) {
+    } catch (error) {
       toast.error("Failed to upload file, please try again!");
     }
-  }, []);
+  };
 
-  const _modelResolver = useMemo(() => {
+  const modelResolver = useMemo(() => {
     return myProvider.languageModel(selectedModelId);
   }, [selectedModelId]);
 
+  const contextMax = useMemo(() => {
+    // Resolve from selected model; stable across chunks.
+    const cw = getContextWindow(modelResolver.modelId);
+    return cw.combinedMax ?? cw.inputMax ?? 0;
+  }, [modelResolver]);
+
+  const usedTokens = useMemo(() => {
+    // Prefer explicit usage data part captured via onData
+    if (!usage) return 0; // update only when final usage arrives
+    const n = normalizeUsage(usage);
+    return typeof n.total === "number"
+      ? n.total
+      : (n.input ?? 0) + (n.output ?? 0);
+  }, [usage]);
+
   const contextProps = useMemo(
     () => ({
+      maxTokens: contextMax,
+      usedTokens,
       usage,
+      modelId: modelResolver.modelId,
     }),
-    [usage]
+    [contextMax, usedTokens, usage, modelResolver]
   );
 
   const handleFileChange = useCallback(
@@ -229,11 +240,44 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [setAttachments, uploadFile]
+    [setAttachments]
   );
 
+  const { isAtBottom, scrollToBottom } = useScrollToBottom();
+
+  useEffect(() => {
+    if (status === "submitted") {
+      scrollToBottom();
+    }
+  }, [status, scrollToBottom]);
+
   return (
-    <div className={cn("relative flex w-full flex-col gap-4", className)}>
+    <div className="relative flex w-full flex-col gap-4">
+      <AnimatePresence>
+        {!isAtBottom && (
+          <motion.div
+            animate={{ opacity: 1, y: 0 }}
+            className="-top-12 -translate-x-1/2 absolute left-1/2 z-50"
+            exit={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 10 }}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+          >
+            <Button
+              className="rounded-full"
+              data-testid="scroll-to-bottom-button"
+              onClick={(event) => {
+                event.preventDefault();
+                scrollToBottom();
+              }}
+              size="icon"
+              variant="outline"
+            >
+              <ArrowDown />
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {messages.length === 0 &&
         attachments.length === 0 &&
         uploadQueue.length === 0 && (
@@ -254,7 +298,7 @@ function PureMultimodalInput({
       />
 
       <PromptInput
-        className="rounded-xl border border-border bg-background p-3 shadow-xs transition-all duration-200 focus-within:border-border hover:border-muted-foreground/50"
+        className="rounded-xl border border-border bg-background shadow-sm transition-all duration-200 focus-within:border-border hover:border-muted-foreground/50"
         onSubmit={(event) => {
           event.preventDefault();
           if (status !== "ready") {
@@ -266,7 +310,7 @@ function PureMultimodalInput({
       >
         {(attachments.length > 0 || uploadQueue.length > 0) && (
           <div
-            className="flex flex-row items-end gap-2 overflow-x-scroll"
+            className="flex flex-row items-end gap-2 overflow-x-scroll px-3 py-2"
             data-testid="attachments-preview"
           >
             {attachments.map((attachment) => (
@@ -297,10 +341,10 @@ function PureMultimodalInput({
             ))}
           </div>
         )}
-        <div className="flex flex-row items-start gap-1 sm:gap-2">
+        <div className="flex flex-row items-start gap-2">
           <PromptInputTextarea
             autoFocus
-            className="grow resize-none border-0! border-none! bg-transparent p-2 text-sm outline-none ring-0 [-ms-overflow-style:none] [scrollbar-width:none] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-scrollbar]:hidden"
+            className="!border-0 !border-none grow resize-none bg-transparent p-3 text-sm outline-none ring-0 [-ms-overflow-style:none] [scrollbar-width:none] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-scrollbar]:hidden"
             data-testid="multimodal-input"
             disableAutoResize={true}
             maxHeight={200}
@@ -313,28 +357,25 @@ function PureMultimodalInput({
           />{" "}
           <Context {...contextProps} />
         </div>
-        <PromptInputToolbar className="!border-top-0 border-t-0! p-0 shadow-none dark:border-0 dark:border-transparent!">
-          <PromptInputTools className="gap-0 sm:gap-0.5">
+        <PromptInputToolbar className="!border-t-0 !border-top-0 dark:!border-transparent px-3 py-2 shadow-none dark:border-0">
+          <PromptInputTools className="gap-2">
             <AttachmentsButton
               fileInputRef={fileInputRef}
               selectedModelId={selectedModelId}
               status={status}
             />
-            <ModelSelectorCompact
-              onModelChange={onModelChange}
-              selectedModelId={selectedModelId}
-            />
+            <ModelSelectorCompact selectedModelId={selectedModelId} />
           </PromptInputTools>
 
           {status === "submitted" ? (
             <StopButton setMessages={setMessages} stop={stop} />
           ) : (
             <PromptInputSubmit
-              className="size-8 rounded-full bg-primary text-primary-foreground transition-colors duration-200 hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
+              className="rounded-full bg-primary p-2 text-primary-foreground transition-colors duration-200 hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
               disabled={!input.trim() || uploadQueue.length > 0}
               status={status}
             >
-              <ArrowUpIcon size={14} />
+              <ArrowUpIcon size={16} />
             </PromptInputSubmit>
           )}
         </PromptInputToolbar>
@@ -346,21 +387,12 @@ function PureMultimodalInput({
 export const MultimodalInput = memo(
   PureMultimodalInput,
   (prevProps, nextProps) => {
-    if (prevProps.input !== nextProps.input) {
+    if (prevProps.input !== nextProps.input) return false;
+    if (prevProps.status !== nextProps.status) return false;
+    if (!equal(prevProps.attachments, nextProps.attachments)) return false;
+    if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
       return false;
-    }
-    if (prevProps.status !== nextProps.status) {
-      return false;
-    }
-    if (!equal(prevProps.attachments, nextProps.attachments)) {
-      return false;
-    }
-    if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType) {
-      return false;
-    }
-    if (prevProps.selectedModelId !== nextProps.selectedModelId) {
-      return false;
-    }
+    if (prevProps.selectedModelId !== nextProps.selectedModelId) return false;
 
     return true;
   }
@@ -379,16 +411,17 @@ function PureAttachmentsButton({
 
   return (
     <Button
-      className="aspect-square h-8 rounded-lg p-1 transition-colors hover:bg-accent"
+      className="h-fit rounded-md p-1.5 transition-colors duration-200 hover:bg-muted"
       data-testid="attachments-button"
       disabled={status !== "ready" || isReasoningModel}
       onClick={(event) => {
         event.preventDefault();
         fileInputRef.current?.click();
       }}
+      size="sm"
       variant="ghost"
     >
-      <PaperclipIcon size={14} style={{ width: 14, height: 14 }} />
+      <PaperclipIcon size={14} />
     </Button>
   );
 }
@@ -397,16 +430,10 @@ const AttachmentsButton = memo(PureAttachmentsButton);
 
 function PureModelSelectorCompact({
   selectedModelId,
-  onModelChange,
 }: {
   selectedModelId: string;
-  onModelChange?: (modelId: string) => void;
 }) {
   const [optimisticModelId, setOptimisticModelId] = useState(selectedModelId);
-
-  useEffect(() => {
-    setOptimisticModelId(selectedModelId);
-  }, [selectedModelId]);
 
   const selectedModel = chatModels.find(
     (model) => model.id === optimisticModelId
@@ -418,7 +445,6 @@ function PureModelSelectorCompact({
         const model = chatModels.find((m) => m.name === modelName);
         if (model) {
           setOptimisticModelId(model.id);
-          onModelChange?.(model.id);
           startTransition(() => {
             saveChatModelAsCookie(model.id);
           });
@@ -426,27 +452,23 @@ function PureModelSelectorCompact({
       }}
       value={selectedModel?.name}
     >
-      <Trigger
-        className="flex h-8 items-center gap-2 rounded-lg border-0 bg-background px-2 text-foreground shadow-none transition-colors hover:bg-accent focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+      <PromptInputModelSelectTrigger
+        className="text-xs focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=closed]:ring-0 data-[state=open]:ring-0"
         type="button"
       >
-        <CpuIcon size={16} />
-        <span className="hidden font-medium text-xs sm:block">
-          {selectedModel?.name}
-        </span>
-        <ChevronDownIcon size={16} />
-      </Trigger>
-      <PromptInputModelSelectContent className="min-w-[260px] p-0">
-        <div className="flex flex-col gap-px">
-          {chatModels.map((model) => (
-            <SelectItem key={model.id} value={model.name}>
-              <div className="truncate font-medium text-xs">{model.name}</div>
-              <div className="mt-px truncate text-[10px] text-muted-foreground leading-tight">
+        {selectedModel?.name || "Select model"}
+      </PromptInputModelSelectTrigger>
+      <PromptInputModelSelectContent>
+        {chatModels.map((model) => (
+          <SelectItem key={model.id} value={model.name}>
+            <div className="flex flex-col items-start gap-1 py-1">
+              <div className="font-medium">{model.name}</div>
+              <div className="text-muted-foreground text-xs">
                 {model.description}
               </div>
-            </SelectItem>
-          ))}
-        </div>
+            </div>
+          </SelectItem>
+        ))}
       </PromptInputModelSelectContent>
     </PromptInputModelSelect>
   );
@@ -463,15 +485,17 @@ function PureStopButton({
 }) {
   return (
     <Button
-      className="size-7 rounded-full bg-foreground p-1 text-background transition-colors duration-200 hover:bg-foreground/90 disabled:bg-muted disabled:text-muted-foreground"
+      className="h-fit rounded-full border border-border p-2 transition-colors duration-200 hover:bg-muted"
       data-testid="stop-button"
       onClick={(event) => {
         event.preventDefault();
         stop();
         setMessages((messages) => messages);
       }}
+      size="sm"
+      variant="outline"
     >
-      <StopIcon size={14} />
+      <StopIcon size={16} />
     </Button>
   );
 }

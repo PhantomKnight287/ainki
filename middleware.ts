@@ -1,6 +1,5 @@
+import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
-import { guestRegex, isDevelopmentEnvironment } from "./lib/constants";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -17,24 +16,31 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = await getToken({
-    req: request,
-    secret: process.env.AUTH_SECRET,
-    secureCookie: !isDevelopmentEnvironment,
-  });
-
-  if (!token) {
-    const redirectUrl = encodeURIComponent(request.url);
-
-    return NextResponse.redirect(
-      new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, request.url)
-    );
+  if (pathname === "/api/auth/guest") {
+    return NextResponse.next();
   }
 
-  const isGuest = guestRegex.test(token?.email ?? "");
+  const token = getSessionCookie(request);
 
-  if (token && !isGuest && ["/login", "/register"].includes(pathname)) {
-    return NextResponse.redirect(new URL("/", request.url));
+  if (!token) {
+    if (pathname === "/") {
+      return NextResponse.next();
+    }
+
+    // Redirect /chat to guest auth when no token
+    if (pathname === "/chat") {
+      return NextResponse.redirect(new URL("/api/auth/guest", request.url));
+    }
+
+    const redirectUrl = encodeURIComponent(request.url);
+
+    if (pathname.startsWith("/chat/")) {
+      return NextResponse.redirect(new URL("/chat", request.url));
+    }
+
+    return NextResponse.redirect(
+      new URL(`/chat?redirectUrl=${redirectUrl}`, request.url)
+    );
   }
 
   return NextResponse.next();

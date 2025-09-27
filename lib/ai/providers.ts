@@ -5,6 +5,11 @@ import {
   wrapLanguageModel,
 } from "ai";
 import { isTestEnvironment } from "../constants";
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+
+const openrouter = createOpenRouter({
+  apiKey:process.env.OPENROUTER_API_KEY,
+})
 
 export const myProvider = isTestEnvironment
   ? (() => {
@@ -25,12 +30,9 @@ export const myProvider = isTestEnvironment
     })()
   : customProvider({
       languageModels: {
-        "chat-model": gateway.languageModel("xai/grok-2-vision-1212"),
-        "chat-model-reasoning": wrapLanguageModel({
-          model: gateway.languageModel("xai/grok-3-mini"),
-          middleware: extractReasoningMiddleware({ tagName: "think" }),
-        }),
-        "title-model": gateway.languageModel("xai/grok-2-1212"),
-        "artifact-model": gateway.languageModel("xai/grok-2-1212"),
+        "chat-model": openrouter("google/gemini-2.5-flash-lite"),
+        "chat-model-reasoning": openrouter("google/gemini-2.5-flash-lite"),
+        "title-model": openrouter("google/gemini-2.5-flash-lite"),
+        "artifact-model": openrouter("google/gemini-2.5-flash-lite"),
       },
     });
