@@ -24,6 +24,7 @@ import { MessageEditor } from "./message-editor";
 import { MessageReasoning } from "./message-reasoning";
 import { PreviewAttachment } from "./preview-attachment";
 import { Weather } from "./weather";
+import { AnkiCardIcon } from "./icons";
 
 const PurePreviewMessage = ({
   chatId,
@@ -267,6 +268,35 @@ const PurePreviewMessage = ({
               );
             }
 
+            if (type === "tool-createAnkiCard") {
+              const { toolCallId, state } = part;
+
+              return (
+                <Tool defaultOpen={true} key={toolCallId}> 
+                  <ToolHeader state={state} type="tool-createAnkiCard" />
+                  <ToolContent>
+                    {state === "input-available" && (
+                      <ToolInput input={part.input} />
+                    )}
+                    {state === "output-available" && (
+                      <ToolOutput
+                        errorText={undefined}
+                        output={
+                          "error" in part.output ? (
+                            <div className="rounded border p-2 text-red-500">
+                              Error: {String(part.output.error)}
+                            </div>
+                          ) : (
+                            <AnkiCardResult result={part.output} />
+                          )
+                        }
+                      />
+                    )}
+                  </ToolContent>
+                </Tool>
+              );
+            }
+
             return null;
           })}
 
@@ -355,5 +385,122 @@ const LoadingText = ({ children }: { children: React.ReactNode }) => {
     >
       {children}
     </motion.div>
+  );
+};
+
+const AnkiCardResult = ({ result }: { result: any }) => {
+  // Handle streaming results with status updates
+  if (result?.status === 'loading') {
+    return (
+      <div className="flex items-center gap-3 p-4 rounded-lg border bg-muted/50">
+        <div className="animate-spin rounded-full h-4 w-4 border-2 border-muted-foreground/25 border-t-primary"></div>
+        <div className="flex-1">
+          <div className="text-sm font-medium">Creating Anki Card</div>
+          <div className="text-xs text-muted-foreground">{result.text}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (result?.status === 'error') {
+    return (
+      <div className="flex items-center gap-3 p-4 rounded-lg border border-destructive/50 bg-destructive/10">
+        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-destructive/20 flex items-center justify-center">
+          <svg className="w-3 h-3 text-destructive" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </div>
+        <div className="flex-1">
+          <div className="text-sm font-medium text-destructive">Failed to Create Card</div>
+          <div className="text-xs text-destructive/80">{result.text}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (result?.status === 'success') {
+    return (
+      <div className="rounded-lg border bg-card">
+        <div className="p-4 border-b bg-muted/30">
+          <div className="flex items-center gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
+              <AnkiCardIcon size={16} />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="font-medium">Anki Card Created</h3>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">
+                  {result.card?.type || 'vocabulary'}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">Ready for spaced repetition learning</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Card Content */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Front */}
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Front</div>
+              <div className="text-sm font-medium bg-muted/50 rounded-md p-3 border">
+                {result.card?.front}
+              </div>
+            </div>
+            
+            {/* Back */}
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Back</div>
+              <div className="text-sm bg-muted/50 rounded-md p-3 border">
+                {result.card?.back}
+              </div>
+            </div>
+          </div>
+
+          {/* Context */}
+          {result.card?.context && (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Context</div>
+              <div className="text-sm bg-muted/50 rounded-md p-3 border italic">
+                {result.card.context}
+              </div>
+            </div>
+          )}
+
+          {/* Tags */}
+          {result.card?.tags && result.card.tags.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tags</div>
+              <div className="flex flex-wrap gap-1">
+                {result.card.tags.map((tag: string, index: number) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-secondary/80 text-secondary-foreground"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback for other result formats
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/50">
+      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+        <AnkiCardIcon size={14} />
+      </div>
+      <div className="flex-1">
+        <div className="text-sm font-medium">Anki Card</div>
+        <div className="text-xs text-muted-foreground">
+          {result?.text || result?.message || "Card created successfully"}
+        </div>
+      </div>
+    </div>
   );
 };

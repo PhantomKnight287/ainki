@@ -13,7 +13,7 @@ import { after } from "next/server";
 import {
   createResumableStreamContext,
   type ResumableStreamContext,
-} from "resumable-stream";
+} from "resumable-stream/ioredis";
 import { generateTitleFromUserMessage } from "@/app/(chat)/actions";
 import { auth } from "@/auth";
 import type { VisibilityType } from "@/components/visibility-selector";
@@ -22,6 +22,7 @@ import type { ChatModel } from "@/lib/ai/models";
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
 import { myProvider } from "@/lib/ai/providers";
 import { createDocument } from "@/lib/ai/tools/create-document";
+import { createAnkiCard } from "@/lib/ai/tools/create-anki-card";
 import { getWeather } from "@/lib/ai/tools/get-weather";
 import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
 import { updateDocument } from "@/lib/ai/tools/update-document";
@@ -40,6 +41,7 @@ import { ChatSDKError } from "@/lib/errors";
 import type { ChatMessage } from "@/lib/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
+import { ZodError } from "zod";
 
 export const maxDuration = 60;
 
@@ -71,7 +73,10 @@ export async function POST(request: Request) {
   try {
     const json = await request.json();
     requestBody = postRequestBodySchema.parse(json);
-  } catch (_) {
+  } catch (e) {
+    if(e instanceof ZodError){
+      console.log(e)
+    }
     return new ChatSDKError("bad_request:api").toResponse();
   }
 
@@ -170,6 +175,7 @@ export async function POST(request: Request) {
                   "createDocument",
                   "updateDocument",
                   "requestSuggestions",
+                  "createAnkiCard",
                 ],
           experimental_transform: smoothStream({ chunking: "word" }),
           tools: {
@@ -180,6 +186,7 @@ export async function POST(request: Request) {
               session,
               dataStream,
             }),
+            createAnkiCard: createAnkiCard({ session, writer: dataStream }),
           },
           experimental_telemetry: {
             isEnabled: true,

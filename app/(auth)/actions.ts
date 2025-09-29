@@ -1,6 +1,6 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { auth } from "@/auth";
 
@@ -52,6 +52,7 @@ export const login = async (
 
     redirect("/");
   } catch (error) {
+    unstable_rethrow(error)
     console.error("Login error:", error);
 
     if (error instanceof z.ZodError) {

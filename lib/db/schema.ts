@@ -229,6 +229,34 @@ export const verification = pgTable("verification", {
     .notNull(),
 });
 
+// Anki card types
+export const ankiCardTypeEnum = pgEnum("anki_card_type", [
+  "vocabulary",
+  "verb", 
+  "phrase",
+  "grammar"
+]);
+
+export const ankiCardDifficultyEnum = pgEnum("anki_card_difficulty", [
+  "beginner",
+  "intermediate", 
+  "advanced"
+]);
+
+export const ankiCard = pgTable("anki_cards", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  cardData: jsonb("card_data").notNull(),
+  processed: boolean("processed").default(false).notNull(),
+  processedAt: timestamp("processed_at"),
+  ankiDeckId: text("anki_deck_id"), // Optional: track which Anki deck this was added to
+});
+
+export type AnkiCard = InferSelectModel<typeof ankiCard>;
+
 export type Verification = InferSelectModel<typeof verification>;
 export type Session = InferSelectModel<typeof session>;
 export type Account = InferSelectModel<typeof account>;

@@ -6,7 +6,7 @@ import type { AuthUser } from "@/auth";
 import { PlusIcon } from "@/components/icons";
 import { SidebarHistory } from "@/components/sidebar-history";
 import { SidebarUserNav } from "@/components/sidebar-user-nav";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -62,7 +62,14 @@ export function AppSidebar({ user }: { user: AuthUser | undefined }) {
       <SidebarContent>
         <SidebarHistory user={user} />
       </SidebarContent>
-      <SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
+      <SidebarFooter>{!user ?<>
+        <Link
+          className={buttonVariants({})}
+          href={"/login"}
+        >
+          Login
+        </Link>
+      </>: <SidebarUserNav user={user} />}</SidebarFooter>
     </Sidebar>
   );
 }

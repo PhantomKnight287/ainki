@@ -7,6 +7,7 @@ import type { requestSuggestions } from "./ai/tools/request-suggestions";
 import type { updateDocument } from "./ai/tools/update-document";
 import type { Suggestion } from "./db/schema";
 import type { AppUsage } from "./usage";
+import { createAnkiCard } from "./ai/tools/create-anki-card";
 
 export type DataPart = { type: "append-message"; message: string };
 
@@ -22,12 +23,14 @@ type updateDocumentTool = InferUITool<ReturnType<typeof updateDocument>>;
 type requestSuggestionsTool = InferUITool<
   ReturnType<typeof requestSuggestions>
 >;
+type createAnkiCardTool = InferUITool<ReturnType<typeof createAnkiCard>>;
 
 export type ChatTools = {
   getWeather: weatherTool;
   createDocument: createDocumentTool;
   updateDocument: updateDocumentTool;
   requestSuggestions: requestSuggestionsTool;
+  createAnkiCard: createAnkiCardTool;
 };
 
 export type CustomUIDataTypes = {

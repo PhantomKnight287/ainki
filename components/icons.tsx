@@ -1211,3 +1211,46 @@ export const WarningIcon = ({ size = 16 }: { size?: number }) => {
     </svg>
   );
 };
+
+export const AnkiCardIcon = ({ size = 16 }: { size?: number }) => {
+  return (
+    <svg
+      data-testid="anki-card-icon"
+      height={size}
+      strokeLinejoin="round"
+      style={{ color: "currentcolor" }}
+      viewBox="0 0 16 16"
+      width={size}
+    >
+      <path
+        d="M2 3C1.44772 3 1 3.44772 1 4V12C1 12.5523 1.44772 13 2 13H14C14.5523 13 15 12.5523 15 12V4C15 3.44772 14.5523 3 14 3H2Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M1 6H15"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <circle
+        cx="4"
+        cy="4.5"
+        r="0.5"
+        fill="currentColor"
+      />
+      <circle
+        cx="6"
+        cy="4.5"
+        r="0.5"
+        fill="currentColor"
+      />
+      <circle
+        cx="8"
+        cy="4.5"
+        r="0.5"
+        fill="currentColor"
+      />
+    </svg>
+  );
+};

@@ -20,6 +20,8 @@ import { ChatSDKError } from "../errors";
 import type { AppUsage } from "../usage";
 import { generateUUID } from "../utils";
 import {
+  ankiCard,
+  type AnkiCard,
   type Chat,
   chat,
   type DBMessage,
@@ -53,32 +55,7 @@ export async function getUser(email: string): Promise<User[]> {
   }
 }
 
-export async function createUser(email: string, password: string) {
-  const hashedPassword = generateHashedPassword(password);
 
-  try {
-    return await db.insert(user).values({ email, password: hashedPassword });
-  } catch (_error) {
-    throw new ChatSDKError("bad_request:database", "Failed to create user");
-  }
-}
-
-export async function createGuestUser() {
-  const email = `guest-${Date.now()}`;
-  const password = generateHashedPassword(generateUUID());
-
-  try {
-    return await db.insert(user).values({ email, password }).returning({
-      id: user.id,
-      email: user.email,
-    });
-  } catch (_error) {
-    throw new ChatSDKError(
-      "bad_request:database",
-      "Failed to create guest user"
-    );
-  }
-}
 
 export async function saveChat({
   id,
@@ -557,6 +534,120 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
     throw new ChatSDKError(
       "bad_request:database",
       "Failed to get stream ids by chat id"
+    );
+  }
+}
+
+// Anki Card Queries
+export async function saveAnkiCard({
+  userId,
+  cardData,
+}: {
+  userId: string;
+  cardData: Record<string, any>;
+}) {
+  try {
+    const [savedCard] = await db
+      .insert(ankiCard)
+      .values({
+        userId,
+        cardData,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return savedCard;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to save Anki card");
+  }
+}
+
+export async function getAnkiCardsByUserId({
+  userId,
+  limit = 50,
+  processed,
+}: {
+  userId: string;
+  limit?: number;
+  processed?: boolean;
+}) {
+  try {
+    const whereConditions = [eq(ankiCard.userId, userId)];
+    
+    if (processed !== undefined) {
+      whereConditions.push(eq(ankiCard.processed, processed));
+    }
+
+    return await db
+      .select()
+      .from(ankiCard)
+      .where(and(...whereConditions))
+      .orderBy(desc(ankiCard.createdAt))
+      .limit(limit);
+  } catch (_error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to get Anki cards by user id"
+    );
+  }
+}
+
+export async function getUnprocessedAnkiCards({ limit = 100 }: { limit?: number } = {}) {
+  try {
+    return await db
+      .select()
+      .from(ankiCard)
+      .where(eq(ankiCard.processed, false))
+      .orderBy(asc(ankiCard.createdAt))
+      .limit(limit);
+  } catch (_error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to get unprocessed Anki cards"
+    );
+  }
+}
+
+export async function markAnkiCardAsProcessed({
+  cardId,
+  ankiDeckId,
+}: {
+  cardId: string;
+  ankiDeckId?: string;
+}) {
+  try {
+    const updateData: { processed: boolean; processedAt: Date; ankiDeckId?: string } = {
+      processed: true,
+      processedAt: new Date(),
+    };
+    
+    if (ankiDeckId) {
+      updateData.ankiDeckId = ankiDeckId;
+    }
+
+    return await db
+      .update(ankiCard)
+      .set(updateData)
+      .where(eq(ankiCard.id, cardId))
+      .returning();
+  } catch (_error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to mark Anki card as processed"
+    );
+  }
+}
+
+export async function deleteAnkiCard({ cardId }: { cardId: string }) {
+  try {
+    return await db
+      .delete(ankiCard)
+      .where(eq(ankiCard.id, cardId))
+      .returning();
+  } catch (_error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to delete Anki card"
     );
   }
 }

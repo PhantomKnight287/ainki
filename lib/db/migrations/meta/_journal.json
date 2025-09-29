@@ -64,6 +64,13 @@
       "when": 1758722728771,
       "tag": "0008_goofy_madame_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1758951782556,
+      "tag": "0009_motionless_zombie",
+      "breakpoints": true
     }
   ]
 }
